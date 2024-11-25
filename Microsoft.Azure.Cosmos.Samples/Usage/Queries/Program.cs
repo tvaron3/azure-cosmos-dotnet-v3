@@ -27,7 +27,7 @@
 
         // Async main requires c# 7.1 which is set in the csproj with the LangVersion attribute
         // <Main>
-        public static async Task Main(string[] args)
+        /*public static async Task Main(string[] args)
         {
             try
             {
@@ -70,7 +70,7 @@
                 Console.ReadKey();
             }
         }
-        // </Main>
+        // </Main>*/
 
         // <RunDemoAsync>
         private static async Task RunDemoAsync(CosmosClient client)
