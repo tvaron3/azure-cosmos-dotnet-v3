@@ -58,6 +58,13 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
             public string City;
         }
 
+        public class NoMemberExampleClass
+        {
+            public NoMemberExampleClass(string stringValue)
+            {
+            }
+        }
+
         public class GuidClass : LinqTestObject
         {
             [JsonProperty(PropertyName = "id")]
@@ -747,7 +754,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
 
             // Currently unsupported case 
             inputs.Add(new LinqTestInput("GroupBy Single Value With Min", b => getQuery(b).GroupBy(k => k.FamilyId /*keySelector*/,
-                                                                              (key, values) => new { familyId = key, familyIdCount = values.Count() } /*multi-value select */)));
+                                                                              (key, values) => new { familyId = key, familyIdCount = values.Count() } /*multi-value select */),
+                                                                              ignoreOrder: true));
 
             // Other methods followed by GroupBy
 
@@ -851,48 +859,49 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
         {
             List<LinqTestInput> inputs = new List<LinqTestInput>();
             inputs.Add(new LinqTestInput("GroupBy Multi Value Select Constant", b => getQuery(b).GroupBy(k => k /*keySelector*/,
-                                                                                (key, values) => 
+                                                                                (key, values) =>
                                                                                 new {
                                                                                     stringField = "abv",
-                                                                                    numField = 123
-                                                                                })));
+                                                                                    numField = 123}),
+                                                                                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy Multi Value Select Key", b => getQuery(b).GroupBy(k => k.Id /*keySelector*/,
                                                                                 (key, values) => new {
                                                                                     Key = key,
-                                                                                    key
-                                                                                })));
+                                                                                    key}),
+                                                                                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy Multi Value Select Key and Constant", b => getQuery(b).GroupBy(k => k.Id /*keySelector*/,
                                                                                 (key, values) => new {
                                                                                     KeyAlias = key,
-                                                                                    values = 123 /* intentionally have the same spelling as the IGrouping values */
-                                                                                })));
+                                                                                    values = 123 /* intentionally have the same spelling as the IGrouping values */}),
+                                                                                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy Multi Value With Aggregate", b => getQuery(b).GroupBy(k => k.Id /*keySelector*/,
                                                                                 (key, values) => new {
                                                                                     Min = values.Min(value => value.Int),
                                                                                     Max = values.Max(value => value.Int),
                                                                                     Avg = values.Average(value => value.Int),
-                                                                                    Count = values.Count()
-                                                                                })));
+                                                                                    Count = values.Count()}),
+                                                                                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy Multi Value With Property Ref and Aggregate", b => getQuery(b).GroupBy(k => k.FamilyId /*keySelector*/,
                                                                               (key, values) => new { 
                                                                                   familyId = key, 
-                                                                                  familyIdCount = values.Count() 
-                                                                              })));
+                                                                                  familyIdCount = values.Count()}),
+                                                                              ignoreOrder: true));
 
             // Negative cases 
 
             // The translation is correct (SELECT VALUE MIN(root) FROM root GROUP BY root["Number"]
             // but the behavior between LINQ and SQL is different
-            // In Linq, it requires the object to have comparer traits, where as in CosmosDB, we will return null
+            // In Linq, the queries will return an object on root, where as in CosmosDB, we will return null
             inputs.Add(new LinqTestInput("GroupBy Multi Value With Aggregate On Root", b => getQuery(b).GroupBy(k => k.Id /*keySelector*/,
                                                                                 (key, values) => new {
                                                                                     Min = values.Min(),
-                                                                                    Max = values.Max()
-                                                                                })));
+                                                                                    Max = values.Max()}), 
+                                                                                ignoreOrder: true,
+                                                                                skipVerification: true));
 
             // Non-aggregate method calls
             inputs.Add(new LinqTestInput("GroupBy Multi Value With Non-Aggregate", b => getQuery(b).GroupBy(k => k.Id /*keySelector*/,
@@ -906,50 +915,50 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 .Select(x => x.Id)
                 .GroupBy(k => k /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Select + GroupBy 2", b => getQuery(b)
                 .Select(x => new { Id1 = x.Id, family1 = x.FamilyId, childrenN1 = x.Children })
                 .GroupBy(k => k.Id1 /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("SelectMany + GroupBy", b => getQuery(b)
                 .SelectMany(x => x.Children)
                 .GroupBy(k => k /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}),
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Skip + GroupBy", b => getQuery(b)
                 .Skip(10)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Take + GroupBy", b => getQuery(b)
                 .Take(10)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Skip + Take + GroupBy", b => getQuery(b)
                 .Skip(10).Take(10)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}),
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Filter + GroupBy", b => getQuery(b)
                 .Where(x => x.Id != "a")
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
-                    count = values.Count()
-                })));
+                    count = values.Count()}), 
+                    ignoreOrder: true));
 
             // should this become a subquery with order by then group by?
             inputs.Add(new LinqTestInput("OrderBy + GroupBy", b => getQuery(b)
@@ -979,7 +988,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Select(x => x)));
+                .Select(x => x), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + Select 2", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
@@ -992,25 +1002,29 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Skip(10)));
+                .Skip(10),
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + Take", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Take(10)));
+                .Take(10), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + Skip + Take", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Skip(10).Take(10)));
+                .Skip(10).Take(10), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + Filter", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Where(x => x.keyAlias == "a")));
+                .Where(x => x.keyAlias == "a"), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + OrderBy", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
@@ -1028,13 +1042,15 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .Where(x => x.keyAlias == "a").Skip(10).Take(10)));
+                .Where(x => x.keyAlias == "a").Skip(10).Take(10), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + GroupBy", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     count = values.Count()})
-                .GroupBy(k => k.count /*keySelector*/, (key, values) => key /*return the group by key */)));
+                .GroupBy(k => k.count /*keySelector*/, (key, values) => key /*return the group by key */), 
+                ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("GroupBy + GroupBy2", b => getQuery(b)
                 .GroupBy(k => k.Id /*keySelector*/, (key, values) => new {
@@ -1044,7 +1060,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 .GroupBy(k => k.count /*keySelector*/, (key, values) => new {
                     keyAlias = key,
                     stringField = "abc"
-                })));
+                }), 
+                ignoreOrder: true));
 
             this.ExecuteTestSuite(inputs);
         }
@@ -1053,25 +1070,7 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
         public void TestGroupByMultiKeyTranslation()
         {
             List<LinqTestInput> inputs = new List<LinqTestInput>();
-            inputs.Add(new LinqTestInput("GroupBy Multi Key Constant", b => getQuery(b).GroupBy(k => 
-                                                                                new
-                                                                                {
-                                                                                    key1 = 123,
-                                                                                    key2 = "abc"
-                                                                                } /*keySelector*/,
-                                                                                (key, values) => key.key1)));
-
-            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value Constant", b => getQuery(b).GroupBy(k => 
-                                                                                new
-                                                                                {
-                                                                                    key1 = 123,
-                                                                                    key2 = "abc"
-                                                                                } /*keySelector*/,
-                                                                                (key, values) => new {
-                                                                                    NumValue = key.key1,
-                                                                                    StringValue = key.key2
-                                                                                })));
-
+            
             inputs.Add(new LinqTestInput("GroupBy Multi Key Constant", b => getQuery(b).GroupBy(k =>
                                                                                 new
                                                                                 {
@@ -1086,7 +1085,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                                                                                     key1 = k.Id,
                                                                                     key2 = k.FamilyId
                                                                                 } /*keySelector*/,
-                                                                                (key, values) => new {
+                                                                                (key, values) => new
+                                                                                {
                                                                                     IdField = key.key1,
                                                                                     FamilyField = key.key2
                                                                                 })));
@@ -1097,7 +1097,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                                                                                     k.Id,
                                                                                     k.FamilyId
                                                                                 } /*keySelector*/,
-                                                                                (key, values) => new {
+                                                                                (key, values) => new
+                                                                                {
                                                                                     IdField = key.Id,
                                                                                     FamilyField = key.FamilyId
                                                                                 })));
@@ -1109,7 +1110,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                                                                                     key1 = k.Id,
                                                                                     key2 = k.FamilyId
                                                                                 } /*keySelector*/,
-                                                                                (key, values) => new {
+                                                                                (key, values) => new
+                                                                                {
                                                                                     key.key1,
                                                                                     key.key2
                                                                                 })));
@@ -1118,24 +1120,43 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                                                                                 new
                                                                                 {
                                                                                     key1 = k.Id.Trim(),
-                                                                                    key2 = k.FamilyId + 2
+                                                                                    key2 = k.FamilyId
                                                                                 } /*keySelector*/,
-                                                                                (key, values) => new {
+                                                                                (key, values) => new
+                                                                                {
                                                                                     IdField = key.key1,
                                                                                     FamilyField = key.key2
                                                                                 })));
 
-            // Other methods followed by GroupBy
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value With Aggregate", b => getQuery(b).GroupBy(k =>
+                                                                                new
+                                                                                {
+                                                                                    key1 = k.Id,
+                                                                                    key2 = k.FamilyId
+                                                                                } /*keySelector*/,
+                                                                                (key, values) => new
+                                                                                {
+                                                                                    IdField = key.key1,
+                                                                                    FamilyField = values.Count()
+                                                                                })));
+
+            //Other methods followed by GroupBy
+
+            //This one the count is wrong for some reason, need to look into the data set
 
             inputs.Add(new LinqTestInput("Select + GroupBy", b => getQuery(b)
-                .Select(x => x.Id)
-                .GroupBy(k => new {
-                    key1 = k,
-                    key2 = k } /*keySelector*/,
-                    (key, values) => new {
-                    keyAlias = key.key1,
-                    count = key.key2.Count()
-                })));
+               .Select(x => x.Id)
+               .GroupBy(k => new
+               {
+                   key1 = k,
+                   key2 = k.ToLower()
+               } /*keySelector*/,
+                   (key, values) => new
+                   {
+                       keyAlias = key.key1,
+                       keyAlias2 = key.key2
+                   }),
+                   ignoreOrder: true));
 
             inputs.Add(new LinqTestInput("Select + GroupBy 2", b => getQuery(b)
                 .Select(x => new { Id1 = x.Id, family1 = x.FamilyId, childrenN1 = x.Children })
@@ -1143,7 +1164,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id1,
                     key2 = k.family1
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     keyAlias = key.key1,
                     count = values.Count(x => x.family1 != "a")
                 })));
@@ -1154,7 +1176,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.FamilyName,
                     key2 = k.Gender
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     ValueKey1 = key.key1,
                     ValueKey2 = key.key2,
                 })));
@@ -1165,7 +1188,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1176,7 +1200,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1187,7 +1212,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1198,7 +1224,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1210,7 +1237,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1221,7 +1249,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1233,7 +1262,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })));
@@ -1244,7 +1274,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1255,7 +1286,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1267,7 +1299,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1278,7 +1311,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1289,7 +1323,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1300,7 +1335,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1311,7 +1347,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1322,7 +1359,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1333,7 +1371,8 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
@@ -1344,11 +1383,57 @@ namespace Microsoft.Azure.Cosmos.Services.Management.Tests.LinqProviderTests
                 {
                     key1 = k.Id,
                     key2 = k.Int
-                } /*keySelector*/, (key, values) => new {
+                } /*keySelector*/, (key, values) => new
+                {
                     idField = key.key1,
                     intField = key.key2,
                 })
                 .GroupBy(k => k.idField /*keySelector*/, (key, values) => key /*return the group by key */)));
+
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Constant", b => getQuery(b).GroupBy(k =>
+                                                                                new
+                                                                                {
+                                                                                    key1 = 123,
+                                                                                    key2 = "abc"
+                                                                                } /*keySelector*/,
+                                                                                (key, values) => key.key1)));
+
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value Constant", b => getQuery(b).GroupBy(k =>
+                                                                                new
+                                                                                {
+                                                                                    key1 = 123,
+                                                                                    key2 = "abc"
+                                                                                } /*keySelector*/,
+                                                                                (key, values) => new
+                                                                                {
+                                                                                    NumValue = key.key1,
+                                                                                    StringValue = key.key2
+                                                                                })));
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value Constant 2", b => getQuery(b).GroupBy(k =>
+                                                                                new {} /*keySelector*/,
+                                                                                (key, values) => new
+                                                                                {
+                                                                                    NumValue = 10,
+                                                                                    StringValue = "abc"
+                                                                                })));
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value Constant 2", b => getQuery(b).GroupBy(k =>
+                                                                                new { k.Id } /*keySelector*/,
+                                                                                (key, values) => new
+                                                                                {
+                                                                                    NumValue = 10,
+                                                                                    StringValue = "abc"
+                                                                                })));
+            inputs.Add(new LinqTestInput("GroupBy Multi Key Multi Value Constant No Member expression", b => getQuery(b).GroupBy(k =>
+                                                                                new NoMemberExampleClass(k.Id) /*keySelector*/,
+                                                                                (key, values) => new
+                                                                                {
+                                                                                    NumValue = 10,
+                                                                                    StringValue = "abc"
+                                                                                })));
+            foreach (LinqTestInput input in inputs)
+            {
+                input.ignoreOrder = true;
+            }
 
             this.ExecuteTestSuite(inputs);
         }

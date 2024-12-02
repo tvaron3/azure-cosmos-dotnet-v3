@@ -34,8 +34,8 @@ namespace Cosmos.Samples.Shared
             }
         }
 
-        private static readonly string accountEndpoint = ""; // insert your endpoint here.
-        private static readonly string accountKey = ""; // insert your key here.
+        //private static readonly string accountEndpoint = ""; // insert your endpoint here.
+        //private static readonly string accountKey = ""; // insert your key here.
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemBenchmark"/> class.
@@ -46,7 +46,7 @@ namespace Cosmos.Samples.Shared
         }
 
 
-        public static async Task Main(string[] args)
+        /*public static async Task Main(string[] args)
         {
             CosmosClientBuilder clientBuilder = new CosmosClientBuilder(
                 accountEndpoint: accountEndpoint,
@@ -120,7 +120,7 @@ namespace Cosmos.Samples.Shared
                         		dynamic array = jsonSerializer.Deserialize<dynamic>(jtr);
                         		Console.WriteLine(array);   
                     
-                    			}*/
+                    			}*\
                 	}
                 	watch.Stop();
                 	var elapsedMs = watch.ElapsedMilliseconds;
@@ -140,7 +140,7 @@ namespace Cosmos.Samples.Shared
 	    }
 
 
-        }
+        }*/
 
 
 

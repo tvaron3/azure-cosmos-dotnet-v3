@@ -32,6 +32,7 @@ namespace Microsoft.Azure.Cosmos
     using Microsoft.Azure.Documents.FaultInjection;
     using Microsoft.Azure.Documents.Routing;
     using Newtonsoft.Json;
+    using ResourceType = Documents.ResourceType;
 
     /// <summary>
     /// Provides a client-side logical representation for the Azure Cosmos DB service.
@@ -114,6 +115,7 @@ namespace Microsoft.Azure.Cosmos
 
         private readonly bool IsLocalQuorumConsistency = false;
         private readonly bool isReplicaAddressValidationEnabled;
+        private readonly AvailabilityStrategy availabilityStrategy;
 
         //Fault Injection
         private readonly IChaosInterceptorFactory chaosInterceptorFactory;
@@ -439,6 +441,7 @@ namespace Microsoft.Azure.Cosmos
         /// <param name="cosmosClientId"></param>
         /// <param name="remoteCertificateValidationCallback">This delegate responsible for validating the third party certificate. </param>
         /// <param name="cosmosClientTelemetryOptions">This is distributed tracing flag</param>
+        /// <param name="availabilityStrategy">This is the availability strategy for the client</param>"
         /// <param name="chaosInterceptorFactory">This is the chaos interceptor used for fault injection</param>
         /// <remarks>
         /// The service endpoint can be obtained from the Azure Management Portal.
@@ -468,6 +471,7 @@ namespace Microsoft.Azure.Cosmos
                               string cosmosClientId = null,
                               RemoteCertificateValidationCallback remoteCertificateValidationCallback = null,
                               CosmosClientTelemetryOptions cosmosClientTelemetryOptions = null,
+                              AvailabilityStrategy availabilityStrategy = null,
                               IChaosInterceptorFactory chaosInterceptorFactory = null)
         {
             if (sendingRequestEventArgs != null)
@@ -491,6 +495,7 @@ namespace Microsoft.Azure.Cosmos
             this.transportClientHandlerFactory = transportClientHandlerFactory;
             this.IsLocalQuorumConsistency = isLocalQuorumConsistency;
             this.initTaskCache = new AsyncCacheNonBlocking<string, bool>(cancellationToken: this.cancellationTokenSource.Token);
+            this.availabilityStrategy = availabilityStrategy;
             this.chaosInterceptorFactory = chaosInterceptorFactory;
             this.chaosInterceptor = chaosInterceptorFactory?.CreateInterceptor(this);
 
@@ -945,10 +950,18 @@ namespace Microsoft.Azure.Cosmos
                 this.ConnectionPolicy,
                 handler,
                 this.sendingRequest,
-                this.receivedResponse);
+                this.receivedResponse,
+                this.chaosInterceptor);
 
             // Loading VM Information (non blocking call and initialization won't fail if this call fails)
             VmMetadataApiHandler.TryInitialize(this.httpClient);
+
+            if (this.cosmosClientTelemetryOptions.IsClientMetricsEnabled)
+            {
+                CosmosDbOperationMeter.Initialize();
+
+                CosmosDbOperationMeter.AddInstanceCount(this.ServiceEndpoint);
+            }
 
             // Starting ClientTelemetry Job
             this.telemetryToServiceHelper = TelemetryToServiceHelper.CreateAndInitializeClientConfigAndTelemetryJob(this.clientId,
@@ -1544,6 +1557,15 @@ namespace Microsoft.Azure.Cosmos
             return builder.ToString();
         }
 
+        internal async Task InitilizeFaultInjectionAsync()
+        {
+            if (this.chaosInterceptorFactory != null && !this.isChaosInterceptorInititalized)
+            {
+                this.isChaosInterceptorInititalized = true;
+                await this.chaosInterceptorFactory.ConfigureChaosInterceptorAsync();
+            }
+        }
+
         internal RntbdConnectionConfig RecordTcpSettings(ClientConfigurationTraceDatum clientConfigurationTraceDatum)
         {
             return new RntbdConnectionConfig(this.openConnectionTimeoutInSeconds,
@@ -1589,11 +1611,7 @@ namespace Microsoft.Azure.Cosmos
                     throw;
                 }
 
-                if (this.chaosInterceptorFactory != null && !this.isChaosInterceptorInititalized)
-                {
-                    this.isChaosInterceptorInititalized = true;
-                    await this.chaosInterceptorFactory.ConfigureChaosInterceptorAsync();
-                }
+                await this.InitilizeFaultInjectionAsync();
             }
         }
 

@@ -7,7 +7,7 @@
 
 There are 3 kind of events generated:
 1. LatencyOverThrehold: If particular operation latency is more than threshold.
-2. FailedRequest: If particular reequest failed. Status codes not considered as failed, are anything below 300, 404/0, 304/0, 409/0, and 412/0
+2. FailedRequest: If particular request failed. Status codes not considered as failed, are anything below 300, 404/0, 304/0, 409/0, and 412/0
 3. Exception: If any exception occured.
 
 For detail about usage of this feature, please see the [Azure Cosmos DB SDK observability](https://learn.microsoft.com/azure/cosmos-db/nosql/sdk-observability?tabs=dotnet)
@@ -39,6 +39,30 @@ flowchart TD
     SendResponse --> OperationCall
 
 ```
+
+### OpenTelemetry Versioning and Stability Modes
+
+Our SDK follows the versioning guidelines outlined in the [OpenTelemetry Semantic Conventions documentation](https://opentelemetry.io/docs/specs/semconv/database/).
+
+When configuring the `OTEL_SEMCONV_STABILITY_OPT_IN` environment variable, the following options determine the attributes emitted by the SDK:
+
+1. **`database`**: 
+   - The SDK emits all attributes as per the OpenTelemetry database semantic conventions outlined [here](https://opentelemetry.io/docs/specs/semconv/database/cosmosdb/).
+   - Refer to the [list of OpenTelemetry attributes emitted by the SDK](https://github.com/Azure/azure-cosmos-dotnet-v3/blob/master/Microsoft.Azure.Cosmos/src/Telemetry/OpenTelemetry/OpenTelemetryAttributeKeys.cs).
+
+2. **`database/dup`**: 
+   - The SDK emits attributes that follow both OpenTelemetry database semantic conventions, available [here](https://opentelemetry.io/docs/specs/semconv/database/cosmosdb/), and additional attributes supported by the Classic Application Insights SDK.
+   - For a complete attribute list, refer to the OpenTelemetry attributes [here](https://github.com/Azure/azure-cosmos-dotnet-v3/blob/master/Microsoft.Azure.Cosmos/src/Telemetry/OpenTelemetry/OpenTelemetryAttributeKeys.cs) and Classic Application Insights attributes [here](https://github.com/Azure/azure-cosmos-dotnet-v3/blob/master/Microsoft.Azure.Cosmos/src/Telemetry/OpenTelemetry/AppInsightClassicAttributeKeys.cs).
+
+3. **`default`**: 
+   - This mode functions similarly to `database`, emitting attributes that adhere to the OpenTelemetry database semantic conventions. 
+   - View the full [attribute list emitted by the SDK](https://github.com/Azure/azure-cosmos-dotnet-v3/blob/master/Microsoft.Azure.Cosmos/src/Telemetry/OpenTelemetry/OpenTelemetryAttributeKeys.cs).
+
+4. **`appinsightssdk`**: 
+   - The SDK emits only those attributes supported by the Classic Application Insights SDK.
+   - For a comprehensive list of attributes, refer [here](https://github.com/Azure/azure-cosmos-dotnet-v3/blob/master/Microsoft.Azure.Cosmos/src/Telemetry/OpenTelemetry/AppInsightClassicAttributeKeys.cs). 
+
+Choose the appropriate mode to align with your telemetry requirements.
 
 ## Send telemetry from SDK to service (Private Preview)
 

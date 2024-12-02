@@ -13,10 +13,12 @@ namespace Microsoft.Azure.Cosmos
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using global::Azure;
     using Microsoft.Azure.Cosmos.Handlers;
     using Microsoft.Azure.Cosmos.Resource.CosmosExceptions;
     using Microsoft.Azure.Cosmos.Routing;
     using Microsoft.Azure.Cosmos.Telemetry;
+    using Microsoft.Azure.Cosmos.Telemetry.OpenTelemetry;
     using Microsoft.Azure.Cosmos.Tracing;
     using Microsoft.Azure.Documents;
 
@@ -83,6 +85,7 @@ namespace Microsoft.Azure.Cosmos
                cosmosClientId: cosmosClient.Id,
                remoteCertificateValidationCallback: ClientContextCore.SslCustomValidationCallBack(clientOptions.GetServerCertificateCustomValidationCallback()),
                cosmosClientTelemetryOptions: clientOptions.CosmosClientTelemetryOptions,
+               availabilityStrategy: clientOptions.AvailabilityStrategy,
                chaosInterceptorFactory: clientOptions.ChaosInterceptorFactory);
 
             return ClientContextCore.Create(
@@ -209,7 +212,8 @@ namespace Microsoft.Azure.Cosmos
             OperationType operationType,
             RequestOptions requestOptions,
             Func<ITrace, Task<TResult>> task,
-            Func<TResult, OpenTelemetryAttributes> openTelemetry,
+            Tuple<string, Func<TResult, OpenTelemetryAttributes>> openTelemetry,
+            ResourceType? resourceType = null,
             TraceComponent traceComponent = TraceComponent.Transport,
             Tracing.TraceLevel traceLevel = Tracing.TraceLevel.Info)
         {
@@ -222,7 +226,8 @@ namespace Microsoft.Azure.Cosmos
                                                        task,
                                                        openTelemetry,
                                                        traceComponent,
-                                                       traceLevel) :
+                                                       traceLevel,
+                                                       resourceType) :
                 this.OperationHelperWithRootTraceWithSynchronizationContextAsync(
                                                                   operationName,
                                                                   containerName,
@@ -232,7 +237,8 @@ namespace Microsoft.Azure.Cosmos
                                                                   task,
                                                                   openTelemetry,
                                                                   traceComponent,
-                                                                  traceLevel);
+                                                                  traceLevel,
+                                                                  resourceType);
         }
 
         private async Task<TResult> OperationHelperWithRootTraceAsync<TResult>(
@@ -242,9 +248,10 @@ namespace Microsoft.Azure.Cosmos
             OperationType operationType,
             RequestOptions requestOptions,
             Func<ITrace, Task<TResult>> task,
-            Func<TResult, OpenTelemetryAttributes> openTelemetry,
+            Tuple<string, Func<TResult, OpenTelemetryAttributes>> openTelemetry,
             TraceComponent traceComponent,
-            Tracing.TraceLevel traceLevel)
+            Tracing.TraceLevel traceLevel,
+            ResourceType? resourceType)
         {
             bool disableDiagnostics = requestOptions != null && requestOptions.DisablePointOperationDiagnostics;
 
@@ -259,8 +266,8 @@ namespace Microsoft.Azure.Cosmos
                     trace,
                     task,
                     openTelemetry,
-                    operationName,
-                    requestOptions);
+                    requestOptions,
+                    resourceType);
             }
         }
 
@@ -271,9 +278,10 @@ namespace Microsoft.Azure.Cosmos
             OperationType operationType,
             RequestOptions requestOptions,
             Func<ITrace, Task<TResult>> task,
-            Func<TResult, OpenTelemetryAttributes> openTelemetry,
+            Tuple<string, Func<TResult, OpenTelemetryAttributes>> openTelemetry,
             TraceComponent traceComponent,
-            Tracing.TraceLevel traceLevel)
+            Tracing.TraceLevel traceLevel,
+            ResourceType? resourceType)
         {
             Debug.Assert(SynchronizationContext.Current != null, "This should only be used when a SynchronizationContext is specified");
 
@@ -296,8 +304,8 @@ namespace Microsoft.Azure.Cosmos
                         trace,
                         task,
                         openTelemetry,
-                        operationName,
-                        requestOptions);
+                        requestOptions,
+                        resourceType);
                 }
             });
         }
@@ -487,13 +495,28 @@ namespace Microsoft.Azure.Cosmos
             OperationType operationType,
             ITrace trace,
             Func<ITrace, Task<TResult>> task,
-            Func<TResult, OpenTelemetryAttributes> openTelemetry,
-            string operationName,
-            RequestOptions requestOptions)
+            Tuple<string, Func<TResult, OpenTelemetryAttributes>> openTelemetry,
+            RequestOptions requestOptions,
+            ResourceType? resourceType = null)
         {
-            using (OpenTelemetryCoreRecorder recorder = 
+            Func<string> getOperationName = () =>
+            {
+                // If opentelemetry is not enabled then return null operation name, so that no activity is created.
+                if (openTelemetry == null)
+                {
+                    return null;
+                }
+
+                if (resourceType is not null && this.IsBulkOperationSupported(resourceType.Value, operationType))
+                {
+                    return OpenTelemetryConstants.Operations.ExecuteBulkPrefix + openTelemetry.Item1;
+                }
+                return openTelemetry.Item1;
+            };
+
+            using (OpenTelemetryCoreRecorder recorder =
                                 OpenTelemetryRecorderFactory.CreateRecorder(
-                                    operationName: operationName,
+                                    getOperationName: getOperationName,
                                     containerName: containerName,
                                     databaseName: databaseName,
                                     operationType: operationType,
@@ -505,20 +528,30 @@ namespace Microsoft.Azure.Cosmos
                 try
                 {
                     TResult result = await task(trace).ConfigureAwait(false);
-                    if (openTelemetry != null && recorder.IsEnabled)
+                    // Checks if OpenTelemetry is configured for this operation and either Trace or Metrics are enabled by customer
+                    if (openTelemetry != null 
+                        && (!this.ClientOptions.CosmosClientTelemetryOptions.DisableDistributedTracing || this.ClientOptions.CosmosClientTelemetryOptions.IsClientMetricsEnabled))
                     {
-                        // Record request response information
-                        OpenTelemetryAttributes response = openTelemetry(result);
-                        recorder.Record(response);
-                    }
+                        // Extracts and records telemetry data from the result of the operation.
+                        OpenTelemetryAttributes response = openTelemetry?.Item2(result);
 
+                        // Records the telemetry attributes for Distributed Tracing (if enabled)
+                        recorder.Record(response);
+
+                        // Records metrics such as request units, latency, and item count for the operation.
+                        CosmosDbOperationMeter.RecordTelemetry(getOperationName: getOperationName,
+                                                             accountName: this.client.Endpoint,
+                                                             containerName: containerName,
+                                                             databaseName: databaseName,
+                                                             attributes: response);
+                    }
                     return result;
                 }
                 catch (OperationCanceledException oe) when (!(oe is CosmosOperationCanceledException))
                 {
                     CosmosOperationCanceledException operationCancelledException = new CosmosOperationCanceledException(oe, trace);
                     recorder.MarkFailed(operationCancelledException);
-                    
+ 
                     throw operationCancelledException;
                 }
                 catch (ObjectDisposedException objectDisposed) when (!(objectDisposed is CosmosObjectDisposedException))
@@ -543,7 +576,16 @@ namespace Microsoft.Azure.Cosmos
                 catch (Exception ex)
                 {
                     recorder.MarkFailed(ex);
-
+                    if (openTelemetry != null && ex is CosmosException cosmosException)
+                    {
+                        // Records telemetry data related to the exception.
+                        CosmosDbOperationMeter.RecordTelemetry(getOperationName: getOperationName,
+                                                             accountName: this.client.Endpoint,
+                                                             containerName: containerName,
+                                                             databaseName: databaseName,
+                                                             ex: cosmosException);
+                    }
+                 
                     throw;
                 }
             }

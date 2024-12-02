@@ -23,6 +23,8 @@ namespace Microsoft.Azure.Cosmos.SDK.EmulatorTests
             this.cancellationTokenSource = new CancellationTokenSource();
             this.cancellationToken = this.cancellationTokenSource.Token;
 
+            await Util.DeleteAllDatabasesAsync(client);
+
             this.database = await client.CreateDatabaseAsync(Guid.NewGuid().ToString(),
                 cancellationToken: this.cancellationToken);
         }
@@ -44,6 +46,12 @@ namespace Microsoft.Azure.Cosmos.SDK.EmulatorTests
                 validatePartitionKeyRangeCalls: validateSinglePartitionKeyRangeCacheCall,
                 customizeClientBuilder: customizeClientBuilder,
                 accountEndpointOverride: accountEndpointOverride);
+            await this.BaseInit(this.cosmosClient);
+        }
+
+        public async Task TestInit(Action<CosmosClientBuilder> customizeClientBuilder = null)
+        {
+            this.cosmosClient = TestCommon.CreateCosmosClient(customizeClientBuilder: customizeClientBuilder);
             await this.BaseInit(this.cosmosClient);
         }
 
